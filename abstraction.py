@@ -23,7 +23,7 @@ def edge_detection(im):
 def luminance_quantization(im):
     '''Implement luminance quantization (Eq. 8)'''
     
-    lmax = 100 # Zasto je napisao u opisu zadatka da je 100?
+    lmax = 100.0 # Zasto je napisao u opisu zadatka da je 100?
     deltaq = lmax / n_bins # Izracunam razmak koji ce biti
     q = np.linspace(0, lmax, n_bins) # Dobijem niz svih razmaka
 
@@ -48,7 +48,7 @@ def bilateral_gaussian(im):
     windows = ns.sliding_window_view(padded , (2*r+1, 2*r+1, 3)) # Napravice array (400, 254, 1, 17,17,3), u sustini prva dva broja su mesto piksela, ostatak je sam prozor. 
     chnanel_diff = windows - im[:, :, None, None, None, :] # Oduzmem od svakog prozora centralni piksel, ovo bi trebalo da radi. 
     luminance_magnitude = np.sqrt(np.sum((chnanel_diff ** 2), axis=-1)) # Izracunam L2 normu te razlike. 
-    luminance_magnitude = np.exp(-luminance_magnitude**2 / (2.0*sigma_s**2)) # Ukoliko ovo prethodno radi imacemo (400, 254, 1, 17, 17). tj onaj deo |F(p) - F(q)|_f u zadatku. 
+    luminance_magnitude = np.exp(-luminance_magnitude**2 / (2.0*sigma_r**2)) # Ukoliko ovo prethodno radi imacemo (400, 254, 1, 17, 17). tj onaj deo |F(p) - F(q)|_f u zadatku. 
 
     indices = np.indices((2*r+1, 2*r+1)) + 1  
     pixels = np.stack(indices, axis=-1) 
@@ -57,7 +57,7 @@ def bilateral_gaussian(im):
 
     pixels_magnitude = np.linalg.norm(pixels, axis=-1, ord=2, keepdims=False) # Izracunam L2 normu, nisam siguran za ovaj keep dims, ali dobije se taman (17,17) sto mozemo samo 
                                                                                    # da pomnozimo sa luminance magnitude.
-    pixels_magnitude = np.exp(-pixels_magnitude**2/ (2.0*sigma_r**2)) # Po formuli opet fali /2
+    pixels_magnitude = np.exp(-pixels_magnitude**2/ (2.0*sigma_s**2)) # Po formuli opet fali /2
 
     weights =  pixels_magnitude * luminance_magnitude # Pomnozimo ih ovo bi trebalo da bude b(|p-q|_inf)b(|F(p) - F(q)|_f) za svaki prozor. 
     sum_weights = np.sum(weights, axis=(-1,-2, -3)) # Sumiramo, to je delioc u onoj formuli. 
@@ -70,17 +70,24 @@ def bilateral_gaussian(im):
 
 def abstraction(im):
     filtered = skc.rgb2lab(im)
-    for _ in range(n_e):
+    for i in range(n_e):
         filtered = bilateral_gaussian(filtered)
+        imageio.imsave(f'bilateral-it{i}.png', skc.lab2rgb(filtered))
+
     edges = edge_detection(filtered[:, :, 0])
+    imageio.imsave('edges.png', edges)
  
-    for _ in range(n_b - n_e):
+    for i in range(n_b - n_e):
         filtered = bilateral_gaussian(filtered)
+        imageio.imsave(f'bilateral-it{ n_e + i}.png', skc.lab2rgb(filtered))
+
     luminance_quantized = luminance_quantization(filtered[:, :, 0])
+    imageio.imsave('lumquant.png', luminance_quantized)
 
     filtered[:, :, 0] = luminance_quantized * edges # Valjda je ovo dobro
+
     '''Get the final image by merging the channels properly'''
-    combined = filtered  # Todo
+    combined = np.clip(filtered, [0, -128, -128], [100, 127, 127])  # Todo
     return skc.lab2rgb(combined)
 
 
@@ -103,4 +110,4 @@ if __name__ == '__main__':
 
     abstracted = abstraction(im)
     
-    imageio.imsave('abstracted.png', np.clip(abstracted, 0, 1))
+    imageio.imsave('abstracted.png', (np.clip(abstracted, 0, 1) * 255.).astype(np.uint8))
